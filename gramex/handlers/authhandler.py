@@ -242,7 +242,7 @@ class GoogleAuth(AuthHandler, GoogleOAuth2Mixin):
             'key': self.kwargs['key'],
             'secret': self.kwargs['secret']
         }
-        redirect_uri = '{0.protocol:s}://{0.host:s}{0.path:s}'.format(self.request)
+        redirect_uri = self.xrequest_uri
         code = self.get_arg('code', '')
         if code:
             access = yield self.get_authenticated_user(

@@ -365,7 +365,7 @@ class BaseMixin(object):
         for method in self.redirects:
             next_url = method(self)
             if next_url:
-                self.session['_next_url'] = urljoin(self.request.uri, next_url)
+                self.session['_next_url'] = urljoin(self.xrequest_uri, next_url)
                 return
         self.session.setdefault('_next_url', '/')
 
@@ -634,6 +634,7 @@ class BaseHandler(RequestHandler, BaseMixin):
         return self.args[name][0 if first else -1]
 
     def prepare(self):
+        self.xrequest_uri = self.headers.get('X-Request-URI', self.request.full_url())
         for method in self._on_init_methods:
             method(self)
 
