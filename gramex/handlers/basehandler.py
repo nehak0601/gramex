@@ -10,7 +10,7 @@ import tornado.gen
 import gramex.cache
 from binascii import b2a_base64, hexlify
 from orderedattrdict import AttrDict
-from six.moves.urllib_parse import urlparse, urlsplit, urljoin, urlencode
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urljoin, urlencode
 from tornado.web import RequestHandler, HTTPError, MissingArgumentError, decode_signed_value
 from tornado.websocket import WebSocketHandler
 from gramex import conf, __version__
@@ -185,7 +185,7 @@ class BaseMixin(object):
         this same consistent way.
         '''
         # Ensure that redirect is a dictionary before proceeding.
-        if isinstance(redirect, six.string_types):
+        if isinstance(redirect, str):
             redirect = {'url': redirect}
         if not isinstance(redirect, dict):
             app_log.error('url:%s.redirect must be a URL or a dict, not %s',
@@ -208,7 +208,7 @@ class BaseMixin(object):
                 def redirect_method(handler):
                     next_uri = method(handler)
                     if next_uri is not None:
-                        target = urlparse(next_uri)
+                        target = urlsplit(next_uri)
                         if not target.scheme and not target.netloc:
                             return next_uri
                         req = handler.request
@@ -419,7 +419,7 @@ class BaseMixin(object):
                 self._write_headers(headers.items())
                 # result may be a generator / list from build_transform,
                 # or a str/bytes/unicode from Template.generate. Handle both
-                if isinstance(result, (six.string_types, six.binary_type)):
+                if isinstance(result, (str, bytes)):
                     self.write(result)
                 else:
                     for item in result:
@@ -591,7 +591,7 @@ class BaseHandler(RequestHandler, BaseMixin):
         # Convert this to proper unicode using UTF-8 and store in self.args
         self.args = {}
         for k in self.request.arguments:
-            key = (k if isinstance(k, six.binary_type) else k.encode('latin-1')).decode('utf-8')
+            key = (k if isinstance(k, bytes) else k.encode('latin-1')).decode('utf-8')
             # Invalid unicode (e.g. ?x=%f4) throws HTTPError. This disrupts even
             # error handlers. So if there's invalid unicode, log & continue.
             try:
@@ -667,21 +667,15 @@ class BaseHandler(RequestHandler, BaseMixin):
         if not self.current_user:
             # Redirect non-AJAX requests GET/HEAD to login URL (if it's a string)
             ajax = self.request.headers.get('X-Requested-With', '').lower() == 'xmlhttprequest'
-            auth = getattr(self, '_auth', {})
-            if self.request.method in ('GET', 'HEAD') and not ajax:
+            if not ajax and self.request.method in ('GET', 'HEAD'):
+                auth = getattr(self, '_auth', {})
                 url = auth.get('login_url', self.get_login_url())
-                # If login_url is a string, redirect
-                if isinstance(url, six.string_types):
-                    if '?' not in url:
-                        if urlsplit(url).scheme:
-                            # if login url is absolute, make next absolute too
-                            next_url = self.request.full_url()
-                        else:
-                            next_url = self.request.uri
-                        next_key = auth.get('query', 'next')
-                        url += '?' + urlencode({next_key: next_url})
-                    self.redirect(url)
-                    return
+                # Redirect to the login_url adding ?next=<X-Request-URI>
+                p = urlsplit(url)
+                q = parse_qsl(p.query)
+                q.append((auth.get('query', 'next'), self.xrequest_uri))
+                self.redirect(urlunsplit((p.scheme, p.netloc, p.path, urlencode(q), p.fragment)))
+                return
             # Else, send a 401 header
             raise HTTPError(UNAUTHORIZED)
 
@@ -769,8 +763,8 @@ class BaseHandler(RequestHandler, BaseMixin):
         '''
         result = AttrDict()
 
-        args_type = six.text_type
-        if len(args) > 0 and args[0] in (six.text_type, six.binary_type, list, None):
+        args_type = str
+        if len(args) > 0 and args[0] in (str, bytes, list, None):
             args_type, args = args[0], args[1:]
 
         for key in args:
@@ -832,7 +826,7 @@ class BaseHandler(RequestHandler, BaseMixin):
             for key, val in self.args.items():
                 if key not in args and key not in kwargs:
                     result[key] = val
-        elif args_type in (six.string_types, six.binary_type):
+        elif args_type in (str, bytes):
             for key, val in self.args.items():
                 if key not in args and key not in kwargs:
                     result[key] = args_type(val[0])
@@ -942,9 +936,7 @@ handle_cache = {}
 def _handle(path):
     '''Returns a cached append-binary handle to path'''
     if path not in handle_cache:
-        # In Python 2, csv writerow writes byte string. In PY3, it's to a unicode string.
-        # Open file handles accordingly
-        handle_cache[path] = open(path, 'ab') if six.PY2 else io.open(path, 'a', encoding='utf-8')
+        handle_cache[path] = io.open(path, 'a', encoding='utf-8')
     return handle_cache[path]
 
 
