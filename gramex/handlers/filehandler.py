@@ -10,7 +10,7 @@ from tornado.escape import utf8
 from tornado.web import HTTPError
 from collections import defaultdict
 from orderedattrdict import AttrDict
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit, urlunsplit
 from .basehandler import BaseHandler
 from gramex.config import objectpath, app_log
 from gramex import conf as gramex_conf
@@ -233,9 +233,9 @@ class FileHandler(BaseHandler):
                 raise HTTPError(NOT_FOUND, '%s missing index', self.file)
             # Ensure URL has a trailing '/' when displaying the index / default file
             if not self.request.path.endswith('/'):
-
-                suffix = '/?' + self.request.query if self.request.query else '/'
-                self.redirect(self.request.path + suffix, permanent=True)
+                p = urlsplit(self.xrequest_uri)
+                r = urlunsplit((p.scheme, p.netloc, p.path + '/', p.query, p.fragment))
+                self.redirect(r, permanent=True)
                 return
         else:
             self.file = self.path
