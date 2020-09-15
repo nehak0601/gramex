@@ -672,12 +672,15 @@ class BaseHandler(RequestHandler, BaseMixin):
             if not ajax and self.request.method in ('GET', 'HEAD'):
                 auth = getattr(self, '_auth', {})
                 url = auth.get('login_url', self.get_login_url())
-                # Redirect to the login_url adding ?next=<X-Request-URI>
-                p = urlsplit(url)
-                q = parse_qsl(p.query)
-                q.append((auth.get('query', 'next'), self.xrequest_uri))
-                self.redirect(urlunsplit((p.scheme, p.netloc, p.path, urlencode(q), p.fragment)))
-                return
+                # If login_url: false, don't redirect to a login URL. Only redirect if it's a URL
+                if isinstance(url, str):
+                    # Redirect to the login_url adding ?next=<X-Request-URI>
+                    p = urlsplit(url)
+                    q = parse_qsl(p.query)
+                    q.append((auth.get('query', 'next'), self.xrequest_uri))
+                    target = urlunsplit((p.scheme, p.netloc, p.path, urlencode(q), p.fragment))
+                    self.redirect(target)
+                    return
             # Else, send a 401 header
             raise HTTPError(UNAUTHORIZED)
 
