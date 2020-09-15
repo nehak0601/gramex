@@ -634,7 +634,9 @@ class BaseHandler(RequestHandler, BaseMixin):
         return self.args[name][0 if first else -1]
 
     def prepare(self):
-        self.xrequest_uri = self.request.headers.get('X-Request-URI', self.request.full_url())
+        # If X-Request-URI domain is specified, use it. Else use RELATIVE URL, which allows nginx
+        # to proxy_redirect Location headers
+        self.xrequest_uri = self.request.headers.get('X-Request-URI', self.request.uri)
         for method in self._on_init_methods:
             method(self)
 
